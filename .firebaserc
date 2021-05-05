@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "parapp-ff452"
+    "default": "resistenciapp-sandbox",
+    "production":"parapp-ff452"
   }
 }
