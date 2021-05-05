@@ -1,88 +1,53 @@
-"use strict";
-import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
-import { GeoPoint } from "@google-cloud/firestore";
-import * as Geohash from "ngeohash";
-const db = admin.firestore();
+
+import * as functions from "firebase-functions"
+import { firestore } from 'firebase-admin'
+import moment from "moment";
+import db from "./firebase";
+import { deleteComment, updateVote } from "./tools";
+
 
 /*
- {comment:string, currentStatus:string, location:object, photoUrl:string}
+    Vote Comments Photos
 */
-export const new_comment = functions.https.onCall(async (data, context) => {
-  let comment: String;
-  let currentStatus: String;
-  let photoUrl: String;
-  let geohash: String;
-  let location: GeoPoint;
-  if (typeof data.comment === "string" || data.comment instanceof String) {
-    comment = data.comment;
-  } else {
-    comment = "";
-  }
-  if (
-    typeof data.currentStatus === "string" ||
-    data.currentStatus instanceof String
-  ) {
-    currentStatus = data.currentStatus;
-  } else {
-    currentStatus = "";
-  }
-  if (typeof data.photoUrl === "string" || data.photoUrl instanceof String) {
-    photoUrl = data.photoUrl;
-  } else {
-    photoUrl = "";
-  }
-  if (
-    typeof data.location[0] === "number" ||
-    (data.location[0] instanceof Number &&
-      typeof data.location[1] === "number") ||
-    data.location[1] instanceof Number
-  ) {
-    if (
-      data.location[0] >= -90 &&
-      data.location[0] <= 90 &&
-      data.location[1] >= -90 &&
-      data.location[1] <= 90
-    ) {
-      location = new GeoPoint(data.location[0], data.location[1]);
-      geohash = Geohash.encode(data.location[0], data.location[1]);
-    } else {
-      return {
-        res: "No es una ubicacion Valida"
-      };
-    }
-  } else {
-    return {
-      res: "No es una ubicacion Valida"
-    };
-  }
-  const commentData = {
-    timestamp: admin.firestore.Timestamp.now(),
-    comment: comment,
-    currentStatus: currentStatus,
-    location: location,
-    locationHash: geohash,
-    photoUrl: photoUrl,
-    votes: 0,
-    voters: []
-  };
-  return await addToFIreBase(commentData, "Comments");
-});
- 
 
-function addToFIreBase(data: any, collection: any) {
-  return new Promise((resolve, reject) => {
-    db.collection(collection)
-      .add(data)
-      .then(function(docRef) {
-        resolve({
-          res: "200" // add correct
+export const voteCommentPhoto = functions.https.onCall(async ({ vote, photoId, commentId }: { vote: boolean, photoId: string, commentId: string }, context) => {
+    const userId = context.auth ? context.auth.uid : 'TEST'
+    try {
+        const refCollection = db.collection('photos').doc(photoId).collection('comments').doc(commentId)
+        const refVote = refCollection.collection('votes').doc(userId)
+        const update = await db.runTransaction(async (t) => {
+            return updateVote(refCollection, refVote, t, vote, userId)
         });
-      })
-      .catch(function(error) {
-        console.log("Error de base de datos", error);
-        reject(Error("Error Al añadir a la base de datos"));
-      });
-  });
-}
-//943.05
+        if (update === 1) {
+            await deleteComment(refCollection)
+        }
+        return { res: 200, msg: 'Voto   Agregado', }
+    } catch (error) {
+        functions.logger.error(error)
+        return { res: '400', msg: 'Error al agregar  Voto' }
+    }
+})
+
+
+/*
+    Comment Photos
+*/
+
+
+export const commentPhoto = functions.https.onCall(async ({ comment, photoId }: { comment: string, photoId: string }, context) => {
+    const userId = context.auth ? context.auth.uid : 'TEST'
+    const refPhoto = db.collection('photos').doc(photoId)
+    try {
+        if (comment.length <= 1)
+            return { res: '400', msg: 'Error al agregar  Comentario' }
+        const batch = db.batch()
+        batch.update(refPhoto, { comments: firestore.FieldValue.increment(1) })
+        batch.set(refPhoto.collection('comments').doc(), { comment, userId, timestamp: moment(), likes: 0, dislikes: 0, totalLikes: 0 })
+        await batch.commit()
+        return { res: 200, msg: 'Comentario  Agregado' }
+    } catch (error) {
+        functions.logger.error(error)
+        return { res: '400', msg: 'Error al agregar  Comentario' }
+    }
+})
+
