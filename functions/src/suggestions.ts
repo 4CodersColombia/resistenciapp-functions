@@ -1,7 +1,7 @@
 import * as functions from "firebase-functions"
 import moment from "moment";
 import db from "./firebase";
-import { updateVote } from "./tools";
+import { deleteComment, updateVote } from "./tools";
 
 
 
@@ -30,11 +30,14 @@ export const newSuggestion = functions.https.onCall(async ({ suggestion }: { sug
 export const voteSuggestion = functions.https.onCall(async ({ suggestionId, vote }: { suggestionId: string, vote: boolean }, context) => {
     const userId = context.auth ? context.auth.uid : 'TEST'
     try {
-        await db.runTransaction(async (t) => {
-            const refCollection = db.collection('suggestions').doc(suggestionId)
-            const refVote = refCollection.collection('votes').doc(userId)
+        const refCollection = db.collection('suggestions').doc(suggestionId)
+        const refVote = refCollection.collection('votes').doc(userId)
+        const update = await db.runTransaction(async (t) => {
             return updateVote(refCollection, refVote, t, vote, userId)
         });
+        if (update === 1) {
+            await deleteComment(refCollection)
+        }
         return { res: 200, msg: 'Voto Agregado / Actualizado' }
     } catch (error) {
         functions.logger.error(error)

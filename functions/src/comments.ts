@@ -41,7 +41,7 @@ export const commentPhoto = functions.https.onCall(async ({ comment, photoId }: 
         if (comment.length <= 1)
             return { res: '400', msg: 'Error al agregar  Comentario' }
         const batch = db.batch()
-        batch.update(refPhoto, { comments: firestore.FieldValue.increment(1) })
+        batch.update(refPhoto, { totalComments: firestore.FieldValue.increment(1) })
         batch.set(refPhoto.collection('comments').doc(), { comment, userId, timestamp: moment(), likes: 0, dislikes: 0, totalLikes: 0 })
         await batch.commit()
         return { res: 200, msg: 'Comentario  Agregado' }
