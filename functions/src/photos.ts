@@ -63,14 +63,13 @@ export const votePhoto = functions.https.onCall(async ({ vote, photoId }: { vote
 exports.disabledPhotos = functions.pubsub.schedule('every 60 minutes').onRun(async () => {
     //export const disabledPhoto = functions.https.onCall(async () => {
     const lastHours = moment().add(-1, 'day')
-    console.log(moment().format(), lastHours.format())
-    const photos = await db.collection('photos').where('disabled', '==', false).where('timestamp', '<=', lastHours).get()
-    await photos.forEach((doc) => {
+    const photos = await db.collection('photos').where('timestamp', '<=', lastHours).get()
+    return await Promise.all(photos.docs.map((doc) => {
         try {
             doc.ref.update({ disabled: true })
         } catch (error) {
             functions.logger.error(error)
         }
-    })
-    return
+    }))
+
 });
